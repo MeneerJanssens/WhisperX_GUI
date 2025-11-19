@@ -4,17 +4,18 @@ import threading
 import whisper
 import os
 import logging
+from logging.handlers import RotatingFileHandler
 
-# Basic logging to file for easier debugging
-logging.basicConfig(
-	filename="whisper_gui.log",
-	level=logging.INFO,
-	format="%(asctime)s %(levelname)s: %(message)s",
-)
+# Rotating log handler to prevent unlimited log growth
+handler = RotatingFileHandler("whisper_gui.log", maxBytes=1_048_576, backupCount=3, encoding="utf-8")
+handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.addHandler(handler)
 
 class WhisperTranscriptionApp:
 	def copy_transcription(self):
-		text = self.text_area.get("0.0", "end").strip()
+		text = self.text_area.get("1.0", "end").strip()
 		if text:
 			self.root.clipboard_clear()
 			self.root.clipboard_append(text)
@@ -244,7 +245,7 @@ class WhisperTranscriptionApp:
 			self.audio_file = filename
 			self.file_label.configure(text=os.path.basename(filename))
 			self.transcribe_btn.configure(state="normal")
-			self.text_area.delete("0.0", "end")
+			self.text_area.delete("1.0", "end")
 			self.export_btn.configure(state="disabled")
             
 	def transcribe(self):
@@ -257,7 +258,7 @@ class WhisperTranscriptionApp:
 
 		self.transcribe_btn.configure(state="disabled")
 		self.status_label.configure(text="Transcribing... This may take a moment", text_color="#f59e0b")
-		self.text_area.delete("0.0", "end")
+		self.text_area.delete("1.0", "end")
 		self.progress_bar.set(0.0)
 
 		def run_transcription():
@@ -309,7 +310,7 @@ class WhisperTranscriptionApp:
         
 	def update_transcription_ui(self):
 		"""Update UI after transcription completes"""
-		self.text_area.insert("0.0", self.transcription)
+		self.text_area.insert("1.0", self.transcription)
 		self.status_label.configure(text="Transcription complete!", text_color="#10b981")
 		self.transcribe_btn.configure(state="normal")
 		self.export_btn.configure(state="normal")
@@ -339,6 +340,7 @@ class WhisperTranscriptionApp:
 					f.write(self.transcription)
 				messagebox.showinfo("Success", f"Transcription saved to:\n{filename}")
 			except Exception as e:
+				logging.exception("Failed to save transcription: %s", e)
 				messagebox.showerror("Error", f"Failed to save file:\n{str(e)}")
 
 def main():
