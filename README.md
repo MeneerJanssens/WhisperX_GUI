@@ -1,32 +1,6 @@
 # Whisper Turbo Transcription GUI
 
 A modern desktop app for fast audio transcription using Whisper Turbo with a dark-themed GUI built on CustomTkinter.
-## FAQ
-
-- **Q: Which `torch` wheel should I install for CPU vs GPU?**
-   - **GPU (CUDA)**: The pinned `requirements.txt` currently references `torch==2.7.1+cu118`. This requires an NVIDIA GPU and matching CUDA 11.8 drivers/toolkit on the target machine. Install the corresponding CUDA drivers from NVIDIA and ensure the runtime is present.
-   - **CPU-only**: If you don't have a compatible GPU or want a simpler install, install a CPU-only wheel. Example (Windows):
-      ```powershell
-      pip install torch --index-url https://download.pytorch.org/whl/cpu
-      ```
-   - If `pip` fails to find a suitable wheel for your Python version, visit https://pytorch.org/get-started/locally/ and follow the recommended install command for your platform.
-
-- **Q: How do I install `ffmpeg` on Windows?**
-   - Option 1 (scoop):
-      ```powershell
-      scoop install ffmpeg
-      ```
-   - Option 2 (chocolatey):
-      ```powershell
-      choco install ffmpeg
-      ```
-   - Option 3: Download a static build from https://ffmpeg.org/download.html, extract, and add the `bin` folder to your `PATH`.
-
-- **Q: My `pip install -r requirements.txt` fails on `torch` due to CUDA tags. What should I do?**
-   - Use the CPU-only wheel (see above), or choose the correct CUDA-enabled wheel matching your GPU/driver. Alternatively, create a clean venv and install packages one at a time to diagnose the failing package.
-# Whisper Turbo Transcription GUI
-
-A modern desktop app for fast audio transcription using Whisper Turbo with a dark-themed GUI built on CustomTkinter.
 
 ## Features
 - Transcribe audio files (mp3, wav, m4a, ogg, flac, webm, mp4, etc.)
@@ -78,6 +52,30 @@ Basic workflow:
 - If you see audio loading errors, confirm `ffmpeg` is correctly installed and accessible from a terminal.
 - The GUI uses `customtkinter` for theming — adjust the colors in `WhisperTurboGUI.py` if you prefer a different palette.
 
+## FAQ
+
+- **Q: Which `torch` wheel should I install for CPU vs GPU?**
+  - **GPU (CUDA)**: The pinned `requirements.txt` currently references `torch==2.7.1+cu118`. This requires an NVIDIA GPU and matching CUDA 11.8 drivers/toolkit on the target machine. Install the corresponding CUDA drivers from NVIDIA and ensure the runtime is present.
+  - **CPU-only**: If you don't have a compatible GPU or want a simpler install, install a CPU-only wheel. Example (Windows):
+    ```powershell
+    pip install torch --index-url https://download.pytorch.org/whl/cpu
+    ```
+  - If `pip` fails to find a suitable wheel for your Python version, visit https://pytorch.org/get-started/locally/ and follow the recommended install command for your platform.
+
+- **Q: How do I install `ffmpeg` on Windows?**
+  - Option 1 (scoop):
+    ```powershell
+    scoop install ffmpeg
+    ```
+  - Option 2 (chocolatey):
+    ```powershell
+    choco install ffmpeg
+    ```
+  - Option 3: Download a static build from https://ffmpeg.org/download.html, extract, and add the `bin` folder to your `PATH`.
+
+- **Q: My `pip install -r requirements.txt` fails on `torch` due to CUDA tags. What should I do?**
+  - Use the CPU-only wheel (see above), or choose the correct CUDA-enabled wheel matching your GPU/driver. Alternatively, create a clean venv and install packages one at a time to diagnose the failing package.
+
 ## Creating a Windows executable (optional)
 1. Install PyInstaller:
    ```powershell
@@ -96,9 +94,3 @@ MIT
 - Whisper Turbo / OpenAI Whisper
 - PyTorch
 - CustomTkinter
-
----
-If you'd like, I can also:
-- Pin dependency versions in `requirements.txt` based on your environment.
-- Add a small `run.bat` or PowerShell script for convenience.
-- Commit and push these changes to the remote repository.
