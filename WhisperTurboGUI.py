@@ -6,6 +6,9 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("dark-blue")
+
 # Rotating log handler to prevent unlimited log growth
 handler = RotatingFileHandler("whisper_gui.log", maxBytes=1_048_576, backupCount=3, encoding="utf-8")
 handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
@@ -25,7 +28,7 @@ class WhisperTranscriptionApp:
 		Retrieves the text from the text area and copies it to the system clipboard.
 		Provides visual feedback by temporarily changing the button text.
 		"""
-		text = self.text_area.get("1.0", "end").strip()
+		text = self.text_area.get("0.0", "end").strip()
 		if text:
 			self.root.clipboard_clear()
 			self.root.clipboard_append(text)
@@ -262,7 +265,7 @@ class WhisperTranscriptionApp:
 			self.audio_file = filename
 			self.file_label.configure(text=os.path.basename(filename))
 			self.transcribe_btn.configure(state="normal")
-			self.text_area.delete("1.0", "end")
+			self.text_area.delete("0.0", "end")
 			self.export_btn.configure(state="disabled")
             
 	def transcribe(self):
@@ -279,7 +282,7 @@ class WhisperTranscriptionApp:
 
 		self.transcribe_btn.configure(state="disabled")
 		self.status_label.configure(text="Transcribing... This may take a moment", text_color="#f59e0b")
-		self.text_area.delete("1.0", "end")
+		self.text_area.delete("0.0", "end")
 		self.progress_bar.set(0.0)
 
 		def run_transcription():
@@ -334,7 +337,7 @@ class WhisperTranscriptionApp:
 		
 		Inserts the transcription text, updates status, and enables export.
 		"""
-		self.text_area.insert("1.0", self.transcription)
+		self.text_area.insert("0.0", self.transcription)
 		self.status_label.configure(text="Transcription complete!", text_color="#10b981")
 		self.transcribe_btn.configure(state="normal")
 		self.export_btn.configure(state="normal")
@@ -377,8 +380,6 @@ class WhisperTranscriptionApp:
 				messagebox.showerror("Error", f"Failed to save file:\n{str(e)}")
 
 def main():
-	ctk.set_appearance_mode("dark")
-	ctk.set_default_color_theme("blue")
 	root = ctk.CTk()
 	app = WhisperTranscriptionApp(root)
 	root.mainloop()
