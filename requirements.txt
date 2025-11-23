@@ -1,15 +1,14 @@
+--extra-index-url https://download.pytorch.org/whl/cu129
+
 customtkinter==5.2.2
-whisperx
-torch==2.7.1+cu118
+whisperx==3.7.2
+torch==2.8.0+cu129
+torchaudio==2.8.0+cu129
+torchvision==0.23.0+cu129
 numpy==2.2.5
 soundfile==0.13.1
-hf_xet
+hf-xet==1.2.0
 
 # Notes:
 # - `ffmpeg` (the CLI) is required by the audio loader used by whisper; install it separately for your OS.
-# - If you prefer a fully pinned list for the entire environment, run:
-#
-#   pip freeze > requirements.txt
-#
-#   and then review the file. On Windows, pinned torch wheels may include a build tag
-#   (e.g. +cu118) that requires the same CUDA setup on the target machine.
+# - The torch versions above include CUDA 12.9 support (+cu129).
