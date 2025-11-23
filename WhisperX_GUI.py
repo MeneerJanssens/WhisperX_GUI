@@ -1,10 +1,17 @@
+import os
+import shutil
+# Suppress HuggingFace symlink warning on Windows
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import threading
-import whisper
-import os
+import whisperx
 import logging
 from logging.handlers import RotatingFileHandler
+
+import torch
+import gc
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -17,7 +24,7 @@ root_logger.setLevel(logging.INFO)
 root_logger.addHandler(handler)
 
 class WhisperTranscriptionApp:
-	"""Main application class for the Whisper Turbo Transcription GUI.
+	"""Main application class for the WhisperX Transcription GUI.
 	
 	This class handles the UI setup, model loading, audio transcription,
 	and user interactions for transcribing audio files using OpenAI's Whisper model.
@@ -44,7 +51,7 @@ class WhisperTranscriptionApp:
 			root: The root CustomTkinter window.
 		"""
 		self.root = root
-		self.root.title("Whisper Turbo Transcription")
+		self.root.title("WhisperX Transcription")
 		# Larger default window so UI elements are not clipped on startup
 		self.root.geometry("1100x820")
 		# Prevent the window from being resized smaller than the original layout
@@ -53,6 +60,7 @@ class WhisperTranscriptionApp:
         
 		self.model = None
 		self.device = ctk.StringVar(value="auto")
+		self.alignment_enabled = ctk.BooleanVar(value=False)
 		self.audio_file = None
 		self.transcription = ""
         
@@ -61,6 +69,8 @@ class WhisperTranscriptionApp:
 		self.device.trace_add('write', self.reload_model)
 		self.model_loading = False
 		self.load_model()
+		# Check for HF token after UI setup
+		self.root.after(100, self.check_hf_token)
         
 	def setup_ui(self):
 		"""Set up the user interface components.
@@ -71,14 +81,13 @@ class WhisperTranscriptionApp:
 		# Title
 		title = ctk.CTkLabel(
 			self.root,
-			text="Whisper Turbo Transcription",
+			text="WhisperX Transcription",
 			font=("Segoe UI", 28, "bold"),
 			text_color="#f8fafc"
 		)
 		title.pack(pady=(30, 10))
 
 		# Device selection
-		import torch
 		device_frame = ctk.CTkFrame(self.root, fg_color="#181824")
 		device_frame.pack(pady=(0, 10))
 		ctk.CTkLabel(device_frame, text="Device:", font=("Segoe UI", 12), text_color="#f8fafc").pack(side="left", padx=(0, 5))
@@ -86,7 +95,21 @@ class WhisperTranscriptionApp:
 		if torch.cuda.is_available():
 			available_devices.append("cuda")
 		self.device_menu = ctk.CTkOptionMenu(device_frame, variable=self.device, values=available_devices, fg_color="#23263a", text_color="#f8fafc")
-		self.device_menu.pack(side="left")
+		self.device_menu.pack(side="left", padx=(0, 20))
+		
+		# Clear Cache Button
+		self.clear_cache_btn = ctk.CTkButton(
+			device_frame,
+			text="Clear Cache",
+			command=self.clear_cache,
+			fg_color="#ef4444",
+			hover_color="#dc2626",
+			text_color="white",
+			font=("Segoe UI", 11, "bold"),
+			width=100,
+			height=24
+		)
+		self.clear_cache_btn.pack(side="left")
         
 		# File selection frame
 		file_frame = ctk.CTkFrame(self.root, fg_color="#181824")
@@ -112,6 +135,16 @@ class WhisperTranscriptionApp:
 			height=40
 		)
 		select_btn.pack(side="right")
+		
+		# Alignment checkbox
+		self.align_chk = ctk.CTkCheckBox(
+			self.root, 
+			text="Enable Word-Level Alignment (slower)", 
+			variable=self.alignment_enabled,
+			font=("Segoe UI", 12),
+			text_color="#f8fafc"
+		)
+		self.align_chk.pack(pady=(5, 0))
         
 		# Transcribe button
 		self.transcribe_btn = ctk.CTkButton(
@@ -131,7 +164,7 @@ class WhisperTranscriptionApp:
 		# Status label
 		self.status_label = ctk.CTkLabel(
 			self.root,
-			text="Loading Whisper Turbo model...",
+			text="Loading WhisperX model...",
 			font=("Segoe UI", 12, "italic"),
 			text_color="#fbbf24"
 		)
@@ -200,14 +233,13 @@ class WhisperTranscriptionApp:
 		self.export_btn.pack(pady=12)
         
 	def load_model(self):
-		"""Load the Whisper Turbo model in a background thread.
+		"""Load the WhisperX model in a background thread.
 		
 		Determines the device (CPU/CUDA), loads the model asynchronously,
 		and updates the UI with status and errors.
 		"""
 		def load():
 			try:
-				import torch
 				device = self.device.get()
 				orig_device = device
 				if device == "auto":
@@ -215,10 +247,17 @@ class WhisperTranscriptionApp:
 				elif device == "cuda" and not torch.cuda.is_available():
 					device = "cpu"
 					self.root.after(0, lambda: messagebox.showinfo("Device fallback", "CUDA is not available. Falling back to CPU."))
-				self.model = whisper.load_model("turbo", device=device)
-				self.root.after(0, lambda: self.status_label.configure(text=f"Ready to transcribe ({device})", text_color="#10b981"))
+				# Determine compute type
+				compute_type = "float16" if device == "cuda" else "int8"
+				
+				self.model = whisperx.load_model("large-v2", device=device, compute_type=compute_type)
+				self.root.after(0, lambda: self.status_label.configure(text=f"Ready to transcribe ({device}, {compute_type})", text_color="#10b981"))
 				self.root.after(0, lambda: self.transcribe_btn.configure(state="normal"))
-				logging.info("Model loaded on device: %s", device)
+				# Stop animated progress bar and set to complete
+				self.root.after(0, lambda: self.progress_bar.stop())
+				self.root.after(0, lambda: self.progress_bar.configure(mode="determinate"))
+				self.root.after(0, lambda: self.progress_bar.set(1.0))
+				logging.info("Model loaded on device: %s, compute_type: %s", device, compute_type)
 				# If fallback occurred, update dropdown
 				if orig_device != device:
 					self.root.after(0, lambda: self.device.set(device))
@@ -227,13 +266,20 @@ class WhisperTranscriptionApp:
 				self.root.after(0, lambda err=str(e): self.status_label.configure(text=f"Error loading model: {err}", text_color="#ef4444"))
 				self.root.after(0, lambda err=str(e): messagebox.showerror("Error", f"Failed to load Whisper model:\n{err}"))
 				self.root.after(0, lambda: self.transcribe_btn.configure(state="disabled"))
+				# Stop progress bar on error
+				self.root.after(0, lambda: self.progress_bar.stop())
+				self.root.after(0, lambda: self.progress_bar.configure(mode="determinate"))
+				self.root.after(0, lambda: self.progress_bar.set(0.0))
 			finally:
 				# Ensure flag is cleared even if an unexpected error occurs
 				self.model_loading = False
 
 		self.model_loading = True
-		self.status_label.configure(text="Loading Whisper Turbo model...", text_color="#666666")
+		self.status_label.configure(text="Loading WhisperX model...", text_color="#f59e0b")
 		self.transcribe_btn.configure(state="disabled")
+		# Start animated progress bar
+		self.progress_bar.configure(mode="indeterminate")
+		self.progress_bar.start()
 		thread = threading.Thread(target=load, daemon=True)
 		thread.start()
 
@@ -245,6 +291,29 @@ class WhisperTranscriptionApp:
 		self.status_label.configure(text="Reloading model...", text_color="#666666")
 		self.model = None
 		self.load_model()
+		
+	def check_hf_token(self):
+		"""Check if HF_TOKEN is set when alignment is enabled.
+		
+		Displays a warning dialog with instructions if the token is missing.
+		"""
+		if self.alignment_enabled.get() and not os.environ.get("HF_TOKEN"):
+			message = (
+				"Word-level alignment requires a Hugging Face token to download alignment models.\n\n"
+				"To set up your token:\n"
+				"1. Create a free account at https://huggingface.co\n"
+				"2. Go to Settings → Access Tokens and create a token\n"
+				"3. Set the HF_TOKEN environment variable:\n\n"
+				"   PowerShell (persistent):\n"
+				"   [System.Environment]::SetEnvironmentVariable('HF_TOKEN', 'your_token', 'User')\n\n"
+				"   PowerShell (session only):\n"
+				"   $env:HF_TOKEN = \"your_token\"\n\n"
+				"   CMD (session only):\n"
+				"   set HF_TOKEN=your_token\n\n"
+				"4. Restart this application\n\n"
+				"See the README for more details."
+			)
+			messagebox.showwarning("Hugging Face Token Required", message)
         
 	def select_file(self):
 		"""Open a file dialog to select an audio file.
@@ -269,10 +338,10 @@ class WhisperTranscriptionApp:
 			self.export_btn.configure(state="disabled")
             
 	def transcribe(self):
-		"""Transcribe the selected audio file with progress updates.
+		"""Transcribe the selected audio file.
 		
-		Loads audio, chunks it, transcribes each chunk in a background thread,
-		and updates the UI with progress and results.
+		Transcribes the entire audio file directly using Whisper's internal processing.
+		Updates the UI with status and results.
 		"""
 		if not self.audio_file or self.model_loading:
 			return
@@ -281,53 +350,83 @@ class WhisperTranscriptionApp:
 			return
 
 		self.transcribe_btn.configure(state="disabled")
-		self.status_label.configure(text="Transcribing... This may take a moment", text_color="#f59e0b")
+		self.status_label.configure(text="Transcribing... This may take a while for long files", text_color="#f59e0b")
 		self.text_area.delete("0.0", "end")
-		self.progress_bar.set(0.0)
+		self.progress_bar.configure(mode="indeterminate")
+		self.progress_bar.start()
 
 		def run_transcription():
 			try:
-				import numpy as np
-				import math
-				import whisper.audio
+				# Transcribe using WhisperX
+				# 1. Load audio
+				audio = whisperx.load_audio(self.audio_file)
+				
+				# 2. Transcribe with batching (try default batch size first)
+				try:
+					result = self.model.transcribe(audio, batch_size=4)
+				except RuntimeError as e:
+					if "out of memory" in str(e).lower():
+						logging.warning("OOM detected. Retrying with batch_size=1 and gc.collect()")
+						self.root.after(0, lambda: self.status_label.configure(text="OOM detected. Retrying with lower settings...", text_color="#f59e0b"))
+						
+						# Clear memory
+						gc.collect()
+						torch.cuda.empty_cache()
+						
+						# Fallback: batch_size=1
+						result = self.model.transcribe(audio, batch_size=1)
+					else:
+						raise e
 
-				# Load audio using whisper's loader (ffmpeg backend)
-				audio = whisper.audio.load_audio(self.audio_file)
-				sr = whisper.audio.SAMPLE_RATE
-				total_samples = len(audio)
-				chunk_duration = 30  # seconds
-				samples_per_chunk = int(sr * chunk_duration)
-				num_chunks = math.ceil(total_samples / samples_per_chunk)
-				segments = []
-
-				import tempfile
-				import soundfile as sf
-				for i in range(num_chunks):
-					start = i * samples_per_chunk
-					end = min((i + 1) * samples_per_chunk, total_samples)
-					chunk_audio = audio[start:end]
-					# Save chunk to temp file (as wav). Ensure removal in finally.
-					temp_path = None
+				# 3. Align (if enabled)
+				if self.alignment_enabled.get():
+					self.root.after(0, lambda: self.status_label.configure(text="Aligning...", text_color="#f59e0b"))
+					
+					# Clear memory before loading alignment model
+					gc.collect()
+					torch.cuda.empty_cache()
+					
+					device = self.device.get()
+					if device == "auto":
+						device = "cuda" if torch.cuda.is_available() else "cpu"
+					elif device == "cuda" and not torch.cuda.is_available():
+						device = "cpu"
+						
 					try:
-						with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
-							sf.write(tmp.name, chunk_audio, sr)
-							temp_path = tmp.name
-							result = self.model.transcribe(temp_path)
-							segments.append(result.get("text", ""))
-					finally:
-						if temp_path:
-							try:
-								os.remove(temp_path)
-							except Exception:
-								logging.exception("Failed to remove temp file: %s", temp_path)
-					percent = ((i + 1) / num_chunks) * 100
-					self.root.after(0, lambda p=percent: self.progress_bar.set(p/100.0))
-					self.root.after(0, lambda p=percent: self.status_label.configure(text=f"Transcribing... {p:.0f}%", text_color="#f59e0b"))
-				self.transcription = " ".join(segments)
+						model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
+						result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
+					except OSError as e:
+						error_str = str(e).lower()
+						if "not a zip file" in error_str or "corrupted" in error_str:
+							raise OSError("Alignment model appears corrupted. Please use the 'Clear Cache' button and try again.") from e
+						elif "401" in error_str or "unauthorized" in error_str or "authentication" in error_str or "token" in error_str:
+							raise OSError(
+								"Authentication failed. Hugging Face token is required for alignment.\n\n"
+								"To fix this:\n"
+								"1. Get a token from https://huggingface.co/settings/tokens\n"
+								"2. Set HF_TOKEN environment variable (see README)\n"
+								"3. Restart the application\n\n"
+								"PowerShell: [System.Environment]::SetEnvironmentVariable('HF_TOKEN', 'your_token', 'User')"
+							) from e
+						raise e
+					
+					# Clear memory after alignment
+					del model_a
+					gc.collect()
+					torch.cuda.empty_cache()
+
+				# 4. Combine segments
+				segments = result.get("segments", [])
+				self.transcription = " ".join([seg["text"].strip() for seg in segments])
 				self.root.after(0, self.update_transcription_ui)
 			except Exception as e:
 				logging.exception("Transcription error: %s", e)
 				self.root.after(0, lambda err=str(e): self.show_error(err))
+			finally:
+				# Always clean up after transcription
+				gc.collect()
+				if torch.cuda.is_available():
+					torch.cuda.empty_cache()
 
 		thread = threading.Thread(target=run_transcription, daemon=True)
 		thread.start()
@@ -341,6 +440,8 @@ class WhisperTranscriptionApp:
 		self.status_label.configure(text="Transcription complete!", text_color="#10b981")
 		self.transcribe_btn.configure(state="normal")
 		self.export_btn.configure(state="normal")
+		self.progress_bar.stop()
+		self.progress_bar.configure(mode="determinate")
 		self.progress_bar.set(1.0)
         
 	def show_error(self, error_msg):
@@ -353,6 +454,9 @@ class WhisperTranscriptionApp:
 		"""
 		logging.error("Transcription failed: %s", error_msg)
 		self.status_label.configure(text="Transcription failed", text_color="#ef4444")
+		self.progress_bar.stop()
+		self.progress_bar.configure(mode="determinate")
+		self.progress_bar.set(0.0)
 		self.transcribe_btn.configure(state="normal")
 		messagebox.showerror("Error", f"Transcription failed:\n{error_msg}")
         
@@ -378,6 +482,26 @@ class WhisperTranscriptionApp:
 			except Exception as e:
 				logging.exception("Failed to save transcription: %s", e)
 				messagebox.showerror("Error", f"Failed to save file:\n{str(e)}")
+
+	def clear_cache(self):
+		"""Clear the Hugging Face model cache.
+		
+		Deletes the Hugging Face cache directory to resolve corruption issues.
+		"""
+		if not messagebox.askyesno("Clear Cache", "This will delete all cached Hugging Face models (including WhisperX models).\nThey will be re-downloaded next time you run a transcription.\n\nAre you sure?"):
+			return
+			
+		try:
+			# Default HF cache path on Windows
+			cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+			if os.path.exists(cache_dir):
+				shutil.rmtree(cache_dir)
+				messagebox.showinfo("Success", "Cache cleared successfully.\nPlease restart the application.")
+			else:
+				messagebox.showinfo("Info", "Cache directory not found or already empty.")
+		except Exception as e:
+			logging.exception("Failed to clear cache: %s", e)
+			messagebox.showerror("Error", f"Failed to clear cache:\n{e}")
 
 def main():
 	root = ctk.CTk()

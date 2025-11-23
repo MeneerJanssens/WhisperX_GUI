@@ -1,13 +1,14 @@
-# Whisper Turbo Transcription GUI
+# WhisperX Transcription GUI
 
-A modern desktop app for fast audio transcription using Whisper Turbo with a dark-themed GUI built on CustomTkinter.
+A modern desktop app for fast audio transcription using WhisperX with a dark-themed GUI built on CustomTkinter.
 
 ## Features
 - Transcribe audio files (mp3, wav, m4a, ogg, flac, webm, mp4, etc.)
 - Modern, dark-themed GUI with a progress bar and status colors
 - GPU/CPU device selection (auto-detects CUDA)
 - Copy and export transcription
-- Chunked processing for large files to reduce memory usage
+- Batched processing for fast transcription
+- Word-level alignment for accurate timestamps
 - Error handling and user feedback
 
 ## Requirements
@@ -26,8 +27,8 @@ The included `requirements.txt` lists the typical Python packages used by this a
 2. Create and activate a virtual environment (recommended):
    ```powershell
    python -m venv .venv
-   .\.venv\Scripts\Activate.ps1  # PowerShell
-   # or use `.venv\Scripts\activate.bat` for cmd
+   .\\.venv\\Scripts\\Activate.ps1  # PowerShell
+   # or use `.venv\\Scripts\\activate.bat` for cmd
    ```
 3. Install Python dependencies:
    ```powershell
@@ -38,19 +39,76 @@ The included `requirements.txt` lists the typical Python packages used by this a
 ## Usage
 Run the app:
 ```powershell
-python WhisperTurboGUI.py
+python WhisperX_GUI.py
 ```
 
 Basic workflow:
 - Select the device (`auto`, `cpu`, or `cuda`) from the dropdown.
 - Click `Select Audio File` and choose an audio file.
+- (Optional) Check "Enable Word-Level Alignment" for precise timestamps.
 - Click `Transcribe` when the model has loaded.
 - Use `Copy` to copy the transcription to clipboard or `Export Transcription` to save to a `.txt` file.
 
+## Pre-downloading Models (Optional)
+
+You can optionally pre-download the required models before using the GUI:
+
+```powershell
+python download_models.py
+```
+
+This interactive script will:
+- Check if you have an HF_TOKEN set and guide you through setting it up if needed
+- Download the Whisper model (large-v2)
+- Download alignment models for your chosen languages (default: English and Dutch)
+- Set the HF_TOKEN persistently in your Windows environment
+
+The script provides an interactive setup experience and is especially useful for:
+- First-time setup
+- Configuring your HF token without manual environment variable editing
+- Pre-downloading models on a fast connection before working offline
+
+## Hugging Face Token for Alignment
+
+If you enable **word-level alignment**, WhisperX needs to download alignment models from Hugging Face, which requires authentication. You can either use the `download_models.py` script (recommended) or follow these manual steps:
+
+### 1. Get a Hugging Face Token
+- Create a free account at [https://huggingface.co](https://huggingface.co)
+- Go to **Settings → Access Tokens** ([direct link](https://huggingface.co/settings/tokens))
+- Click **New token** and create a token with **read** permissions
+- Copy the token value
+
+### 2. Set the HF_TOKEN Environment Variable
+
+Choose one of the following methods based on your preference:
+
+**PowerShell (Persistent - Recommended)**
+```powershell
+[System.Environment]::SetEnvironmentVariable('HF_TOKEN', 'your_token_here', 'User')
+```
+This sets the token permanently for your user account. You'll need to restart the application after setting it.
+
+**PowerShell (Current Session Only)**
+```powershell
+$env:HF_TOKEN = "your_token_here"
+```
+This only works for the current PowerShell session. You'll need to set it again if you close the terminal.
+
+**Command Prompt (Current Session Only)**
+```cmd
+set HF_TOKEN=your_token_here
+```
+This only works for the current CMD session.
+
+### 3. Restart the Application
+After setting the environment variable (especially for persistent methods), restart the WhisperX GUI application.
+
 ## Notes & Troubleshooting
+- **Alignment errors**: If you encounter authentication errors when using alignment, ensure your `HF_TOKEN` is set correctly (see the section above). You can also try clearing the cache using the "Clear Cache" button and restarting the application.
+- **Corrupted model cache**: If you see "not a zip file" or corruption errors, click the **Clear Cache** button in the app and try again. This will delete cached models and re-download them.
 - If the model fails to load, check that `torch` is installed and (optionally) that CUDA drivers are available for GPU usage.
 - If you see audio loading errors, confirm `ffmpeg` is correctly installed and accessible from a terminal.
-- The GUI uses `customtkinter` for theming — adjust the colors in `WhisperTurboGUI.py` if you prefer a different palette.
+- The GUI uses `customtkinter` for theming — adjust the colors in `WhisperX_GUI.py` if you prefer a different palette.
 
 ## FAQ
 
@@ -83,7 +141,7 @@ Basic workflow:
    ```
 2. Build the executable:
    ```powershell
-   pyinstaller --onefile --noconsole WhisperTurboGUI.py
+   pyinstaller --onefile --noconsole WhisperX_GUI.py
    ```
 3. The `.exe` will be in the `dist` folder. Be careful not to commit large binaries to GitHub (GitHub limits files >100MB).
 
@@ -91,6 +149,6 @@ Basic workflow:
 MIT
 
 ## Credits
-- Whisper Turbo / OpenAI Whisper
+- WhisperX
 - PyTorch
 - CustomTkinter
