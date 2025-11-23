@@ -314,6 +314,19 @@ class WhisperTranscriptionApp:
 				"See the README for more details."
 			)
 			messagebox.showwarning("Hugging Face Token Required", message)
+	
+	def format_timestamp(self, seconds):
+		"""Format timestamp in seconds to MM:SS.mmm format.
+		
+		Args:
+			seconds: Time in seconds (float)
+			
+		Returns:
+			Formatted string in MM:SS.mmm format
+		"""
+		minutes = int(seconds // 60)
+		secs = seconds % 60
+		return f"{minutes:02d}:{secs:06.3f}"
         
 	def select_file(self):
 		"""Open a file dialog to select an audio file.
@@ -417,7 +430,24 @@ class WhisperTranscriptionApp:
 
 				# 4. Combine segments
 				segments = result.get("segments", [])
-				self.transcription = " ".join([seg["text"].strip() for seg in segments])
+				
+				# Format output with timestamps if alignment was used
+				if self.alignment_enabled.get() and segments:
+					# Check if segments have start/end times (they should after alignment)
+					if "start" in segments[0] and "end" in segments[0]:
+						formatted_segments = []
+						for seg in segments:
+							start_time = self.format_timestamp(seg["start"])
+							end_time = self.format_timestamp(seg["end"])
+							formatted_segments.append(f"[{start_time} - {end_time}] {seg['text'].strip()}")
+						self.transcription = "\n".join(formatted_segments)
+					else:
+						# Fallback to plain text if no timestamps
+						self.transcription = " ".join([seg["text"].strip() for seg in segments])
+				else:
+					# Plain text output when alignment is disabled
+					self.transcription = " ".join([seg["text"].strip() for seg in segments])
+				
 				self.root.after(0, self.update_transcription_ui)
 			except Exception as e:
 				logging.exception("Transcription error: %s", e)
