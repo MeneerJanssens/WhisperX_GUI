@@ -4,19 +4,22 @@ A modern desktop app for fast audio transcription using WhisperX with a dark-the
 
 ## Features
 - Transcribe audio files (mp3, wav, m4a, ogg, flac, webm, mp4, etc.)
-- Modern, dark-themed GUI with a progress bar and status colors
+- Modern, dark-themed GUI with **animated progress bar** and status colors
+- **Segment Timestamps:** Displays `[MM:SS.mmm - MM:SS.mmm]` timestamps when alignment is enabled
 - GPU/CPU device selection (auto-detects CUDA)
 - Copy and export transcription
 - Batched processing for fast transcription
 - Word-level alignment for accurate timestamps
-- Error handling and user feedback
+- Error handling and user feedback (including NLTK data auto-download)
 
 ## Requirements
 - Python 3.8+ (3.10/3.11 recommended)
 - System `ffmpeg` (must be installed and available in PATH) — required by the audio loader
+- NVIDIA GPU with CUDA drivers (recommended for speed)
 - Python packages (see `requirements.txt`)
 
-The included `requirements.txt` lists the typical Python packages used by this app.
+**Note on PyTorch:**
+The project is configured for **PyTorch 2.8.0** with **CUDA 12.9** support. Ensure your NVIDIA drivers are up to date (version 525+ recommended).
 
 ## Installation
 1. Clone the repository:
@@ -27,8 +30,8 @@ The included `requirements.txt` lists the typical Python packages used by this a
 2. Create and activate a virtual environment (recommended):
    ```powershell
    python -m venv .venv
-   .\\.venv\\Scripts\\Activate.ps1  # PowerShell
-   # or use `.venv\\Scripts\\activate.bat` for cmd
+   .\.venv\Scripts\Activate.ps1  # PowerShell
+   # or use `.venv\Scripts\activate.bat` for cmd
    ```
 3. Install Python dependencies:
    ```powershell
@@ -46,7 +49,8 @@ Basic workflow:
 - Select the device (`auto`, `cpu`, or `cuda`) from the dropdown.
 - Click `Select Audio File` and choose an audio file.
 - (Optional) Check "Enable Word-Level Alignment" for precise timestamps.
-- Click `Transcribe` when the model has loaded.
+- Click `Transcribe`. The **orange** status text and **animated progress bar** will indicate activity.
+- Once complete, view the transcription (with timestamps if aligned) in the text area.
 - Use `Copy` to copy the transcription to clipboard or `Export Transcription` to save to a `.txt` file.
 
 ## Pre-downloading Models (Optional)
@@ -61,6 +65,7 @@ This interactive script will:
 - Check if you have an HF_TOKEN set and guide you through setting it up if needed
 - Download the Whisper model (large-v2)
 - Download alignment models for your chosen languages (default: English and Dutch)
+- Download NLTK tokenizer data automatically
 - Set the HF_TOKEN persistently in your Windows environment
 
 The script provides an interactive setup experience and is especially useful for:
@@ -106,6 +111,7 @@ After setting the environment variable (especially for persistent methods), rest
 ## Notes & Troubleshooting
 - **Alignment errors**: If you encounter authentication errors when using alignment, ensure your `HF_TOKEN` is set correctly (see the section above). You can also try clearing the cache using the "Clear Cache" button and restarting the application.
 - **Corrupted model cache**: If you see "not a zip file" or corruption errors, click the **Clear Cache** button in the app and try again. This will delete cached models and re-download them.
+- **NLTK errors**: The `download_models.py` script automatically downloads required NLTK data. If you encounter NLTK-related errors, run the script or manually download with: `python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab')"`
 - If the model fails to load, check that `torch` is installed and (optionally) that CUDA drivers are available for GPU usage.
 - If you see audio loading errors, confirm `ffmpeg` is correctly installed and accessible from a terminal.
 - The GUI uses `customtkinter` for theming — adjust the colors in `WhisperX_GUI.py` if you prefer a different palette.
@@ -113,7 +119,7 @@ After setting the environment variable (especially for persistent methods), rest
 ## FAQ
 
 - **Q: Which `torch` wheel should I install for CPU vs GPU?**
-  - **GPU (CUDA)**: The pinned `requirements.txt` currently references `torch==2.7.1+cu118`. This requires an NVIDIA GPU and matching CUDA 11.8 drivers/toolkit on the target machine. Install the corresponding CUDA drivers from NVIDIA and ensure the runtime is present.
+  - **GPU (CUDA)**: The pinned `requirements.txt` currently references `torch==2.8.0+cu129`. This requires an NVIDIA GPU and matching CUDA 12.9 drivers/toolkit on the target machine. Install the corresponding CUDA drivers from NVIDIA and ensure the runtime is present.
   - **CPU-only**: If you don't have a compatible GPU or want a simpler install, install a CPU-only wheel. Example (Windows):
     ```powershell
     pip install torch --index-url https://download.pytorch.org/whl/cpu
@@ -133,6 +139,10 @@ After setting the environment variable (especially for persistent methods), rest
 
 - **Q: My `pip install -r requirements.txt` fails on `torch` due to CUDA tags. What should I do?**
   - Use the CPU-only wheel (see above), or choose the correct CUDA-enabled wheel matching your GPU/driver. Alternatively, create a clean venv and install packages one at a time to diagnose the failing package.
+
+- **Q: What does the timestamp output look like?**
+  - When alignment is enabled, each segment displays with timestamps: `[00:05.500 - 00:08.300] Your transcribed text here`
+  - Without alignment, you get plain text output without timestamps.
 
 ## Creating a Windows executable (optional)
 1. Install PyInstaller:
