@@ -7,6 +7,7 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import threading
 import whisperx
+from whisperx.diarize import DiarizationPipeline
 import logging
 from logging.handlers import RotatingFileHandler
 
@@ -61,6 +62,7 @@ class WhisperTranscriptionApp:
 		self.model = None
 		self.device = ctk.StringVar(value="auto")
 		self.alignment_enabled = ctk.BooleanVar(value=False)
+		self.diarization_enabled = ctk.BooleanVar(value=False)
 		self.audio_file = None
 		self.transcription = ""
         
@@ -145,6 +147,16 @@ class WhisperTranscriptionApp:
 			text_color="#f8fafc"
 		)
 		self.align_chk.pack(pady=(5, 0))
+		
+		# Diarization checkbox
+		self.diarize_chk = ctk.CTkCheckBox(
+			self.root, 
+			text="Enable Speaker Diarization (requires alignment)", 
+			variable=self.diarization_enabled,
+			font=("Segoe UI", 12),
+			text_color="#f8fafc"
+		)
+		self.diarize_chk.pack(pady=(5, 0))
         
 		# Transcribe button
 		self.transcribe_btn = ctk.CTkButton(
@@ -392,7 +404,7 @@ class WhisperTranscriptionApp:
 						raise e
 
 				# 3. Align (if enabled)
-				if self.alignment_enabled.get():
+				if self.alignment_enabled.get() or self.diarization_enabled.get():
 					self.root.after(0, lambda: self.status_label.configure(text="Aligning...", text_color="#f59e0b"))
 					
 					# Clear memory before loading alignment model
@@ -427,13 +439,78 @@ class WhisperTranscriptionApp:
 					del model_a
 					gc.collect()
 					torch.cuda.empty_cache()
+				
+				# 4. Diarize (if enabled)
+				if self.diarization_enabled.get():
+					self.root.after(0, lambda: self.status_label.configure(text="Identifying speakers...", text_color="#f59e0b"))
+					
+					# Clear memory before loading diarization model
+					gc.collect()
+					torch.cuda.empty_cache()
+					
+					# Get HF token
+					hf_token = os.environ.get("HF_TOKEN")
+					if not hf_token:
+						raise OSError(
+							"Speaker diarization requires a Hugging Face token.\n\n"
+							"To fix this:\n"
+							"1. Get a token from https://huggingface.co/settings/tokens\n"
+							"2. Accept model agreements:\n"
+							"   - https://huggingface.co/pyannote/segmentation-3.0\n"
+							"   - https://huggingface.co/pyannote/speaker-diarization-3.1\n"
+							"3. Set HF_TOKEN environment variable (see README)\n"
+							"4. Restart the application\n\n"
+							"PowerShell: [System.Environment]::SetEnvironmentVariable('HF_TOKEN', 'your_token', 'User')"
+						)
+					
+					try:
+						# Load diarization pipeline
+						diarize_model = DiarizationPipeline(use_auth_token=hf_token, device=device)
+						
+						# Run diarization
+						diarize_segments = diarize_model(audio)
+						
+						# Assign speakers to words
+						result = whisperx.assign_word_speakers(diarize_segments, result)
+						
+					except Exception as e:
+						error_str = str(e).lower()
+						if "401" in error_str or "unauthorized" in error_str or "authentication" in error_str:
+							raise OSError(
+								"Authentication failed for diarization models.\n\n"
+								"Please ensure you have:\n"
+								"1. A valid HF_TOKEN set\n"
+								"2. Accepted the user agreements for:\n"
+								"   - https://huggingface.co/pyannote/segmentation-3.0\n"
+								"   - https://huggingface.co/pyannote/speaker-diarization-3.1\n\n"
+								"Visit these links while logged into Hugging Face to accept."
+							) from e
+						else:
+							raise e
+					
+					# Clear memory after diarization
+					del diarize_model
+					gc.collect()
+					torch.cuda.empty_cache()
 
-				# 4. Combine segments
+				# 5. Combine segments and format output
 				segments = result.get("segments", [])
 				
-				# Format output with timestamps if alignment was used
-				if self.alignment_enabled.get() and segments:
-					# Check if segments have start/end times (they should after alignment)
+				# Format output based on enabled features
+				if self.diarization_enabled.get() and segments:
+					# Format with speaker labels and timestamps
+					formatted_segments = []
+					for seg in segments:
+						speaker = seg.get("speaker", "UNKNOWN")
+						if "start" in seg and "end" in seg:
+							start_time = self.format_timestamp(seg["start"])
+							end_time = self.format_timestamp(seg["end"])
+							formatted_segments.append(f"[{speaker}] [{start_time} - {end_time}] {seg['text'].strip()}")
+						else:
+							formatted_segments.append(f"[{speaker}] {seg['text'].strip()}")
+					self.transcription = "\n".join(formatted_segments)
+				elif self.alignment_enabled.get() and segments:
+					# Format with timestamps only (no speaker labels)
 					if "start" in segments[0] and "end" in segments[0]:
 						formatted_segments = []
 						for seg in segments:
@@ -445,7 +522,7 @@ class WhisperTranscriptionApp:
 						# Fallback to plain text if no timestamps
 						self.transcription = " ".join([seg["text"].strip() for seg in segments])
 				else:
-					# Plain text output when alignment is disabled
+					# Plain text output when alignment and diarization are disabled
 					self.transcription = " ".join([seg["text"].strip() for seg in segments])
 				
 				self.root.after(0, self.update_transcription_ui)

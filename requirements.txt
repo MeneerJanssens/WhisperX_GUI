@@ -8,6 +8,7 @@ torchvision==0.23.0+cu129
 numpy==2.2.5
 soundfile==0.13.1
 hf-xet==1.2.0
+pyannote.audio>=3.0.0
 
 # Notes:
 # - `ffmpeg` (the CLI) is required by the audio loader used by whisper; install it separately for your OS.
